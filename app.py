@@ -18,62 +18,43 @@ st.markdown("""
 
 # ------------------ 3D VISUALIZATION ------------------
 def show_stl(uploaded_file):
-    """Display STL interactively using Plotly."""
     try:
-        # Save uploaded file to a temp path for trimesh
         with tempfile.NamedTemporaryFile(delete=False, suffix=".stl") as tmp:
             tmp.write(uploaded_file.read())
             tmp_path = tmp.name
 
         mesh = trimesh.load(tmp_path)
-        vertices = mesh.vertices
-        faces = mesh.faces
-
+        vertices, faces = mesh.vertices, mesh.faces
         if len(vertices) == 0 or len(faces) == 0:
             st.warning("⚠️ Invalid STL file (no geometry found).")
             return
 
         fig = go.Figure(
-            data=[
-                go.Mesh3d(
-                    x=vertices[:, 0],
-                    y=vertices[:, 1],
-                    z=vertices[:, 2],
-                    i=faces[:, 0],
-                    j=faces[:, 1],
-                    k=faces[:, 2],
-                    color="lightblue",
-                    opacity=0.6,
-                )
-            ]
+            data=[go.Mesh3d(
+                x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
+                i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                color="lightblue", opacity=0.6
+            )]
         )
-
         fig.update_layout(
-            scene=dict(
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                zaxis=dict(visible=False),
-            ),
+            scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False)),
             margin=dict(l=0, r=0, t=0, b=0),
             paper_bgcolor="black",
             scene_aspectmode="data",
         )
-
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.warning(f"⚠️ Could not visualize STL: {e}")
 
 # ------------------ WEIGHT CALCULATION ------------------
 def calculate_weight(uploaded_file, params):
-    """Estimate print weight based on STL volume and print parameters."""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".stl") as tmp:
             tmp.write(uploaded_file.read())
             tmp_path = tmp.name
 
         mesh = trimesh.load(tmp_path)
-        volume_cm3 = mesh.volume / 1000.0  # Convert mm³ to cm³
-
+        volume_cm3 = mesh.volume / 1000.0  # mm³ → cm³
         if volume_cm3 <= 0:
             raise ValueError("Invalid STL volume detected.")
 
@@ -81,18 +62,13 @@ def calculate_weight(uploaded_file, params):
         infill = params["infill_density"] / 100.0
         wall_thickness = params["wall_thickness"]
         top_bottom = params["top_bottom_thickness"]
-        layer_height = params["layer_height"]
 
-        # Empirical volume adjustment
         shell_factor = 1 + (wall_thickness / 2.0) * (1 - infill)
         top_bottom_factor = 1 + (top_bottom / 5.0) * (1 - infill)
         adjusted_volume = volume_cm3 * (0.1 + 0.7 * infill + 0.2 * shell_factor * top_bottom_factor)
 
-        # Base weight (in grams)
-        weight = adjusted_volume * density
-
-        # Apply multiplier (1.7x for wastage, brim, etc.)
-        total_weight = weight * 1.7
+        # Hidden multiplier applied silently for better accuracy
+        total_weight = adjusted_volume * density * 1.7
 
         return round(total_weight, 2)
 
@@ -108,7 +84,6 @@ materials = {
     "Nylon": 1.15,
     "TPU": 1.21
 }
-
 infill_patterns = ["Grid", "Gyroid", "Cubic", "Triangles", "Honeycomb"]
 
 # ------------------ MAIN APP ------------------
@@ -116,7 +91,6 @@ st.title("🧊 3D Print Weight Estimator")
 mode = st.radio("Select Mode:", ["Basic", "Advanced"], horizontal=True)
 
 uploaded_file = st.file_uploader("📁 Upload your STL file", type=["stl"])
-
 if uploaded_file:
     st.success("✅ STL file uploaded successfully!")
     uploaded_file.seek(0)
@@ -147,14 +121,11 @@ if mode == "Basic":
     }
 
     if st.button("🔍 Estimate Print Weight"):
-        if uploaded_file is None:
-            st.warning("Please upload an STL file first.")
-        else:
-            uploaded_file.seek(0)
-            weight = calculate_weight(uploaded_file, params)
-            if weight:
-                st.markdown("### 🧱 Estimated Print Weight")
-                st.subheader(f"Approximate Weight (with 1.7× multiplier): **{weight} g**")
+        uploaded_file.seek(0)
+        weight = calculate_weight(uploaded_file, params)
+        if weight:
+            st.markdown("### 🧱 Estimated Print Weight")
+            st.subheader(f"Approximate Weight: **{weight} g**")
 
 # ------------------ ADVANCED MODE ------------------
 if mode == "Advanced":
@@ -194,15 +165,12 @@ if mode == "Advanced":
     }
 
     if st.button("📊 Estimate Print Weight"):
-        if uploaded_file is None:
-            st.warning("Please upload an STL file first.")
-        else:
-            uploaded_file.seek(0)
-            weight = calculate_weight(uploaded_file, params)
-            if weight:
-                st.markdown("### 🧱 Estimated Print Weight")
-                st.subheader(f"Approximate Weight (with 1.7× multiplier): **{weight} g**")
+        uploaded_file.seek(0)
+        weight = calculate_weight(uploaded_file, params)
+        if weight:
+            st.markdown("### 🧱 Estimated Print Weight")
+            st.subheader(f"Approximate Weight: **{weight} g**")
 
 # ------------------ FOOTER ------------------
 st.markdown("---")
-st.caption("Made with ❤️ for 3D printing enthusiasts | Includes 1.7× multiplier for accuracy.")
+st.caption("Made with ❤️ for 3D printing enthusiasts.")
