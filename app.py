@@ -1,6 +1,6 @@
 import streamlit as st
-import trimesh
 import numpy as np
+import trimesh
 import plotly.graph_objects as go
 import tempfile
 
@@ -18,11 +18,20 @@ st.markdown("""
 
 # ------------------ 3D VISUALIZATION ------------------
 def show_stl(uploaded_file):
-    """Display STL model interactively using Plotly."""
+    """Display STL interactively using Plotly."""
     try:
-        mesh = trimesh.load(uploaded_file)
+        # Save uploaded file to a temp path for trimesh
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".stl") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+
+        mesh = trimesh.load(tmp_path)
         vertices = mesh.vertices
         faces = mesh.faces
+
+        if len(vertices) == 0 or len(faces) == 0:
+            st.warning("⚠️ Invalid STL file (no geometry found).")
+            return
 
         fig = go.Figure(
             data=[
@@ -55,11 +64,18 @@ def show_stl(uploaded_file):
         st.warning(f"⚠️ Could not visualize STL: {e}")
 
 # ------------------ WEIGHT CALCULATION ------------------
-def calculate_weight(stl_file, params):
-    """Estimate print weight based on STL geometry and user settings."""
+def calculate_weight(uploaded_file, params):
+    """Estimate print weight based on STL volume and print parameters."""
     try:
-        mesh = trimesh.load(stl_file)
-        volume_cm3 = mesh.volume / 1000  # mm³ → cm³
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".stl") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+
+        mesh = trimesh.load(tmp_path)
+        volume_cm3 = mesh.volume / 1000.0  # Convert mm³ to cm³
+
+        if volume_cm3 <= 0:
+            raise ValueError("Invalid STL volume detected.")
 
         density = params["material_density"]
         infill = params["infill_density"] / 100.0
@@ -67,19 +83,19 @@ def calculate_weight(stl_file, params):
         top_bottom = params["top_bottom_thickness"]
         layer_height = params["layer_height"]
 
-        # Empirical modifiers for accuracy
+        # Empirical volume adjustment
         shell_factor = 1 + (wall_thickness / 2.0) * (1 - infill)
         top_bottom_factor = 1 + (top_bottom / 5.0) * (1 - infill)
-
         adjusted_volume = volume_cm3 * (0.1 + 0.7 * infill + 0.2 * shell_factor * top_bottom_factor)
-        weight = adjusted_volume * density
 
+        weight = adjusted_volume * density  # grams (1 cm³ ≈ 1g for PLA-like density)
         return round(weight, 2)
+
     except Exception as e:
         st.error(f"Error estimating weight: {e}")
         return None
 
-# ------------------ MATERIALS & PATTERNS ------------------
+# ------------------ MATERIALS & INFILL PATTERNS ------------------
 materials = {
     "PLA": 1.24,
     "ABS": 1.04,
@@ -90,7 +106,7 @@ materials = {
 
 infill_patterns = ["Grid", "Gyroid", "Cubic", "Triangles", "Honeycomb"]
 
-# ------------------ UI ------------------
+# ------------------ MAIN APP ------------------
 st.title("🧊 3D Print Weight Estimator")
 mode = st.radio("Select Mode:", ["Basic", "Advanced"], horizontal=True)
 
@@ -128,6 +144,7 @@ if mode == "Basic":
         if uploaded_file is None:
             st.warning("Please upload an STL file first.")
         else:
+            uploaded_file.seek(0)
             weight = calculate_weight(uploaded_file, params)
             if weight:
                 st.markdown("### 🧱 Estimated Print Weight")
@@ -174,6 +191,7 @@ if mode == "Advanced":
         if uploaded_file is None:
             st.warning("Please upload an STL file first.")
         else:
+            uploaded_file.seek(0)
             weight = calculate_weight(uploaded_file, params)
             if weight:
                 st.markdown("### 🧱 Estimated Print Weight")
