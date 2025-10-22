@@ -88,8 +88,13 @@ def calculate_weight(uploaded_file, params):
         top_bottom_factor = 1 + (top_bottom / 5.0) * (1 - infill)
         adjusted_volume = volume_cm3 * (0.1 + 0.7 * infill + 0.2 * shell_factor * top_bottom_factor)
 
-        weight = adjusted_volume * density  # grams (1 cm³ ≈ 1g for PLA-like density)
-        return round(weight, 2)
+        # Base weight (in grams)
+        weight = adjusted_volume * density
+
+        # Apply multiplier (1.7x for wastage, brim, etc.)
+        total_weight = weight * 1.7
+
+        return round(total_weight, 2)
 
     except Exception as e:
         st.error(f"Error estimating weight: {e}")
@@ -114,6 +119,7 @@ uploaded_file = st.file_uploader("📁 Upload your STL file", type=["stl"])
 
 if uploaded_file:
     st.success("✅ STL file uploaded successfully!")
+    uploaded_file.seek(0)
     show_stl(uploaded_file)
 
 # ------------------ BASIC MODE ------------------
@@ -148,7 +154,7 @@ if mode == "Basic":
             weight = calculate_weight(uploaded_file, params)
             if weight:
                 st.markdown("### 🧱 Estimated Print Weight")
-                st.subheader(f"Approximate Weight: **{weight} g**")
+                st.subheader(f"Approximate Weight (with 1.7× multiplier): **{weight} g**")
 
 # ------------------ ADVANCED MODE ------------------
 if mode == "Advanced":
@@ -195,8 +201,8 @@ if mode == "Advanced":
             weight = calculate_weight(uploaded_file, params)
             if weight:
                 st.markdown("### 🧱 Estimated Print Weight")
-                st.subheader(f"Approximate Weight: **{weight} g**")
+                st.subheader(f"Approximate Weight (with 1.7× multiplier): **{weight} g**")
 
 # ------------------ FOOTER ------------------
 st.markdown("---")
-st.caption("Made with ❤️ for 3D printing enthusiasts | Approximation model (no slicer).")
+st.caption("Made with ❤️ for 3D printing enthusiasts | Includes 1.7× multiplier for accuracy.")
