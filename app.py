@@ -1,22 +1,62 @@
 import streamlit as st
 import trimesh
 import numpy as np
+import plotly.graph_objects as go
 import tempfile
-import pyvista as pv
-from stpyvista import stpyvista
 
 # ------------------ PAGE CONFIG ------------------
 st.set_page_config(page_title="3D Print Weight Estimator", layout="wide", page_icon="🧊")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #0E1117; color: white; }
+    .stApp {
+        background-color: #0E1117;
+        color: white;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# ------------------ HELPER FUNCTIONS ------------------
+# ------------------ 3D VISUALIZATION ------------------
+def show_stl(uploaded_file):
+    """Display STL model interactively using Plotly."""
+    try:
+        mesh = trimesh.load(uploaded_file)
+        vertices = mesh.vertices
+        faces = mesh.faces
+
+        fig = go.Figure(
+            data=[
+                go.Mesh3d(
+                    x=vertices[:, 0],
+                    y=vertices[:, 1],
+                    z=vertices[:, 2],
+                    i=faces[:, 0],
+                    j=faces[:, 1],
+                    k=faces[:, 2],
+                    color="lightblue",
+                    opacity=0.6,
+                )
+            ]
+        )
+
+        fig.update_layout(
+            scene=dict(
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                zaxis=dict(visible=False),
+            ),
+            margin=dict(l=0, r=0, t=0, b=0),
+            paper_bgcolor="black",
+            scene_aspectmode="data",
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning(f"⚠️ Could not visualize STL: {e}")
+
+# ------------------ WEIGHT CALCULATION ------------------
 def calculate_weight(stl_file, params):
-    """Estimate print weight based on STL volume and print settings."""
+    """Estimate print weight based on STL geometry and user settings."""
     try:
         mesh = trimesh.load(stl_file)
         volume_cm3 = mesh.volume / 1000  # mm³ → cm³
@@ -27,17 +67,19 @@ def calculate_weight(stl_file, params):
         top_bottom = params["top_bottom_thickness"]
         layer_height = params["layer_height"]
 
+        # Empirical modifiers for accuracy
         shell_factor = 1 + (wall_thickness / 2.0) * (1 - infill)
         top_bottom_factor = 1 + (top_bottom / 5.0) * (1 - infill)
-        adjusted_volume = volume_cm3 * (0.1 + 0.7 * infill + 0.2 * shell_factor * top_bottom_factor)
 
+        adjusted_volume = volume_cm3 * (0.1 + 0.7 * infill + 0.2 * shell_factor * top_bottom_factor)
         weight = adjusted_volume * density
+
         return round(weight, 2)
     except Exception as e:
         st.error(f"Error estimating weight: {e}")
         return None
 
-# ------------------ MATERIAL PRESETS ------------------
+# ------------------ MATERIALS & PATTERNS ------------------
 materials = {
     "PLA": 1.24,
     "ABS": 1.04,
@@ -50,24 +92,13 @@ infill_patterns = ["Grid", "Gyroid", "Cubic", "Triangles", "Honeycomb"]
 
 # ------------------ UI ------------------
 st.title("🧊 3D Print Weight Estimator")
-
 mode = st.radio("Select Mode:", ["Basic", "Advanced"], horizontal=True)
 
-uploaded_file = st.file_uploader("Upload your STL file", type=["stl"])
+uploaded_file = st.file_uploader("📁 Upload your STL file", type=["stl"])
 
 if uploaded_file:
     st.success("✅ STL file uploaded successfully!")
-
-    # --- Visualize the STL file ---
-    try:
-        mesh = pv.read(uploaded_file)
-        plotter = pv.Plotter(window_size=[600, 600])
-        plotter.add_mesh(mesh, color='lightblue', show_edges=True)
-        plotter.set_background('black')
-        st.subheader("🌀 3D Model Preview")
-        stpyvista(plotter)
-    except Exception as e:
-        st.warning(f"⚠️ Could not render STL visualization: {e}")
+    show_stl(uploaded_file)
 
 # ------------------ BASIC MODE ------------------
 if mode == "Basic":
@@ -114,6 +145,7 @@ if mode == "Advanced":
         line_width = st.number_input("Line Width (mm)", 0.2, 1.0, 0.4)
         wall_thickness = st.number_input("Wall Thickness (mm)", 0.4, 5.0, 1.2)
         wall_count = st.number_input("Wall Line Count", 1, 10, 3)
+
     with col2:
         infill_density = st.slider("Infill Density (%)", 0, 100, 20)
         infill_pattern = st.selectbox("Infill Pattern", infill_patterns, index=0)
@@ -121,6 +153,7 @@ if mode == "Advanced":
         top_bottom_thickness = st.number_input("Top/Bottom Thickness (mm)", 0.4, 5.0, 0.8)
         top_layers = st.number_input("Top Layers", 1, 10, 3)
         bottom_layers = st.number_input("Bottom Layers", 1, 10, 3)
+
     with col3:
         print_speed = st.number_input("Print Speed (mm/s)", 10, 300, 200)
         travel_speed = st.number_input("Travel Speed (mm/s)", 10, 300, 125)
@@ -148,4 +181,4 @@ if mode == "Advanced":
 
 # ------------------ FOOTER ------------------
 st.markdown("---")
-st.caption("Made with ❤️ for 3D printing accuracy | Approximation model (no slicer).")
+st.caption("Made with ❤️ for 3D printing enthusiasts | Approximation model (no slicer).")
